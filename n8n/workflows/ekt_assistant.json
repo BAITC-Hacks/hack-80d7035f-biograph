@@ -88,7 +88,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, sku, name, category, price, stock_total, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
+        "query": "SELECT id, sku, name, category, price, currency, stock_total, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
         "options": {
           "queryReplacement": "={{ $fromAI('query', 'Поисковая фраза или артикул', 'string') }}"
         },
@@ -112,7 +112,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, sku, name, category, price, stock_total, stock_by_warehouse, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
+        "query": "SELECT id, sku, name, category, price, currency, stock_total, stock_by_warehouse, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
         "options": {
           "queryReplacement": "={{ $fromAI('id_or_article', 'Product id or article/SKU', 'string') }}"
         },
@@ -337,7 +337,7 @@
     "availableInMCP": true,
     "binaryMode": "separate"
   },
-  "versionId": "2989ccba-6448-4551-8f0b-c1ed37411c52",
+  "versionId": "091232d9-7e73-4550-9c9e-01cea809e5cf",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"

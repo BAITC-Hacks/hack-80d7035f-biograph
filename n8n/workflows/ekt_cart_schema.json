@@ -31,6 +31,26 @@
           "name": "Postgres account"
         }
       }
+    },
+    {
+      "id": "c2f3d3e2-3495-414e-a74d-44220b6b3ae0",
+      "name": "Sync verified purchase terms",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Verified public purchase terms from ekt.kz; safe to re-run.\nUPDATE terms\nSET answer = 'Для Алматы доставка в пределах города бесплатна при заказе свыше 30 000 ₸. При меньшей сумме — 1 000 или 2 000 ₸ в зависимости от района. По другим городам сроки и стоимость согласуются с менеджером; при заказе свыше 400 000 ₸ доставка бесплатна. Источник: https://ekt.kz/checkout-delivery/',\n    keywords = ARRAY['доставка','доставить','город','срок','условия']\nWHERE question = 'Какие условия доставки?' AND locale = 'ru';\n\nUPDATE terms\nSET answer = 'Физлица могут оплатить заказ банковской картой онлайн, наличными при получении или наличными/картой в торговом зале при самовывозе. Юрлица — перечислением по счёту либо наличными в торговом зале при самовывозе. Источник: https://ekt.kz/checkout-delivery/',\n    keywords = ARRAY['оплата','оплатить','платеж','счёт','счет']\nWHERE question = 'Какие условия оплаты?' AND locale = 'ru';\n\nINSERT INTO terms (question, answer, locale, keywords)\nSELECT 'Есть ли минимальная партия?',\n       'Розничные заказы возможны. Минимальное количество отдельного товара может зависеть от упаковки или формы поставки; точное количество по артикулу уточните у менеджера. Источник: https://ekt.kz/about/faq/',\n       'ru', ARRAY['минимальная','партия','розница','упаковка']\nWHERE NOT EXISTS (\n  SELECT 1 FROM terms WHERE question = 'Есть ли минимальная партия?' AND locale = 'ru'\n);\n\nUPDATE products SET certificate_url = NULL\nWHERE sku LIKE 'TEST-%' AND certificate_url LIKE 'https://example.com/%';\n\nSELECT (SELECT count(*) FROM terms WHERE locale='ru') AS ru_terms,\n       (SELECT count(*) FROM products WHERE sku LIKE 'TEST-%'\n          AND certificate_url LIKE 'https://example.com/%') AS placeholder_certificates;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
     }
   ],
   "connections": {
@@ -44,6 +64,17 @@
           }
         ]
       ]
+    },
+    "Install cart schema": {
+      "main": [
+        [
+          {
+            "node": "Sync verified purchase terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -51,11 +82,10 @@
     "executionOrder": "v1",
     "availableInMCP": true
   },
-  "versionId": "e4364a09-acad-472a-9db3-6d4857312d03",
+  "versionId": "ddc7a636-c766-487d-a6aa-7f46dc9cd277",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"
   },
   "pinData": {}
 }
-

@@ -35,7 +35,9 @@
 
 На https://marindsain8n.ru создан и опубликован workflow `ekt_assistant`. Его Postgres credential подключён к Supabase через Session pooler (порт 5432). SQL из [db/init.sql](db/init.sql) уже выполнен в Supabase. Три демонстрационных запроса — товар по артикулу, отсутствие остатка и доставка — успешно проверены 23 сентября 2026 года.
 
-Для загрузки реального каталога подготовлен `n8n/workflows/ekt_catalog_preview.json` (workflow `ekt_catalog_preview`). В n8n создайте credential типа **HTTP Basic Auth** для API ekt.kz, назначьте его ноде `Fetch first catalogue page` и запустите workflow вручную. Нода `Inspect API shape` покажет названия полей и два образца записи. После проверки структуры ответа можно добавить преобразование и upsert в `products`. Логин и пароль API хранятся только в n8n credential; workflow JSON не содержит их.
+Для загрузки репрезентативной выборки реального каталога используйте `n8n/workflows/ekt_catalog_import.json` (workflow `ekt_catalog_import`). Он по нажатию **Execute workflow** запрашивает детальные данные восьми товаров через Basic Auth API ekt.kz и обновляет `products` в Supabase по артикулу. Импорт проверен: восемь товаров получили реальные цены и остатки; повторный запуск обновит те же строки. Логин и пароль API хранятся только в HTTP Basic Auth credential n8n. Идентификаторы товаров для выборки находятся в ноде `Sample product IDs`; для расширения выборки замените их на идентификаторы из следующих страниц `/api/products?page=N`.
+
+В API списка есть `id`, `article`, `name`, `price` и URL карточки. Надёжный остаток по складам и характеристики берутся из `/api/products/detail?id=...`. Если сертификат в детальном ответе отсутствует, поле сертификата остаётся пустым. Категория для импортируемых товаров выводится из пути URL карточки.
 
 ## Данные
 

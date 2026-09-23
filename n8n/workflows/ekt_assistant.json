@@ -53,17 +53,18 @@
       "parameters": {
         "model": {
           "__rl": true,
+          "value": "gpt-6-luna",
           "mode": "list",
-          "value": "gpt-5-mini"
+          "cachedResultName": "gpt-6-luna"
         },
         "responsesApiEnabled": true,
         "options": {
-          "temperature": 0.2,
           "maxRetries": 2
         }
       },
       "credentials": {
         "openAiApi": {
+          "id": "DKRSP2zCfPIY9gQ8",
           "name": "OpenAI account"
         }
       }
@@ -84,7 +85,8 @@
       },
       "credentials": {
         "postgres": {
-          "name": "Postgres"
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
         }
       }
     },
@@ -108,7 +110,8 @@
       },
       "credentials": {
         "postgres": {
-          "name": "Postgres"
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
         }
       }
     },
@@ -132,7 +135,8 @@
       },
       "credentials": {
         "postgres": {
-          "name": "Postgres"
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
         }
       }
     },
@@ -156,7 +160,8 @@
       },
       "credentials": {
         "postgres": {
-          "name": "Postgres"
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
         }
       }
     },
@@ -180,7 +185,8 @@
       },
       "credentials": {
         "postgres": {
-          "name": "Postgres"
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
         }
       }
     }
@@ -269,7 +275,7 @@
     "executionOrder": "v1",
     "availableInMCP": true
   },
-  "versionId": "cef4c9b2-aaee-4ce8-acdf-70efa83069a3",
+  "versionId": "ef55c6ef-dd66-49bf-b9e1-f61367e16410",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"

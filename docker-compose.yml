@@ -10,6 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./db/cart.sql:/docker-entrypoint-initdb.d/02-cart.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -41,3 +42,4 @@ services:
 volumes:
   postgres_data:
   n8n_data:
+

@@ -1,0 +1,26 @@
+<!-- ekt.kz common footer/template fragment. Install only after the owner grants site access
+     and an Embedded Chat workflow URL is available. Never put API credentials here. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@n8n/chat/dist/style.css">
+<script type="module">
+  import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/dist/chat.bundle.es.js';
+
+  createChat({
+    webhookUrl: 'REPLACE_WITH_EMBEDDED_CHAT_WEBHOOK_URL',
+    mode: 'window',
+    loadPreviousSession: true,
+    enableStreaming: true,
+    defaultLanguage: 'en',
+    initialMessages: [
+      'Здравствуйте! Я консультант ekt.kz. Помогу найти товар и уточнить условия покупки.'
+    ],
+    i18n: {
+      en: {
+        title: 'Консультант ekt.kz',
+        subtitle: 'Товары, наличие и условия покупки',
+        footer: 'Корзина пока демонстрационная, не корзина ekt.kz',
+        getStarted: 'Начать диалог',
+        inputPlaceholder: 'Напишите ваш вопрос...'
+      }
+    }
+  });
+</script>

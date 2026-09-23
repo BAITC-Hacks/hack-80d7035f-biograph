@@ -101,7 +101,7 @@
         "resource": "database",
         "operation": "executeQuery",
         "query": "SELECT id, sku, name, category, price, stock_total, attributes, certificate_url, product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
-        "toolDescription": "Search products by name or article/SKU; call when the customer asks to find or compare products. Returns up to 5 catalog matches.",
+        "toolDescription": "Use when the customer gives a name, partial name, or SKU/article and needs up to five matching products. Do not use it to invent price or stock.",
         "options": {
           "queryReplacement": "={{ $fromAI('query', 'Поисковая фраза или артикул', 'string') }}"
         }
@@ -125,7 +125,7 @@
         "resource": "database",
         "operation": "executeQuery",
         "query": "SELECT id, sku, name, category, price, stock_total, stock_by_warehouse, attributes, certificate_url, product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
-        "toolDescription": "Get one product by numeric id or article/SKU. Returns price, stock by warehouse, characteristics, certificate and ekt.kz card URL.",
+        "toolDescription": "Use when the customer needs an exact product by id or SKU/article, including price, stock by warehouse, specifications, certificate, or ekt.kz product URL. Source of truth for price and availability.",
         "options": {
           "queryReplacement": "={{ $fromAI('id_or_article', 'Product id or article/SKU', 'string') }}"
         }
@@ -149,7 +149,7 @@
         "resource": "database",
         "operation": "executeQuery",
         "query": "SELECT p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url, 'same category; nearest embedding; in stock' AS reason FROM products p WHERE p.category = (SELECT category FROM products WHERE id::text = $1 LIMIT 1) AND p.stock_total > 0 AND p.id::text <> $1 ORDER BY p.embedding <=> (SELECT embedding FROM products WHERE id::text = $1 LIMIT 1) LIMIT 5",
-        "toolDescription": "Find up to 5 in-stock analogs in the same category, nearest by pgvector embedding. Always return reason explaining similarity and differences.",
+        "toolDescription": "Use after get_product shows stock_total is zero, or when the customer explicitly asks for an analog. Returns in-stock products in the same category with a reason.",
         "options": {
           "queryReplacement": "={{ $fromAI('id', 'Product id', 'string') }}"
         }
@@ -173,7 +173,7 @@
         "resource": "database",
         "operation": "executeQuery",
         "query": "SELECT question, answer FROM terms WHERE question ILIKE '%' || $1 || '%' OR answer ILIKE '%' || $1 || '%' ORDER BY question LIMIT 5",
-        "toolDescription": "Answer questions about payment, delivery and minimum order using only the terms table; never invent conditions.",
+        "toolDescription": "Use for delivery, payment, minimum order, return, or other purchase terms. Answer only from the returned terms.",
         "options": {
           "queryReplacement": "={{ $fromAI('question', 'Customer question about purchase terms', 'string') }}"
         }

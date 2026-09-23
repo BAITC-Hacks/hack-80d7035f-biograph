@@ -24,6 +24,12 @@
             "response": {
               "responseFormat": "json"
             }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 500
+            }
           }
         }
       },
@@ -32,7 +38,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        240,
+        680,
         0
       ],
       "credentials": {
@@ -48,13 +54,13 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
+        440,
         0
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const ids = [45357,515279,515280,515278,515282,515283,515281,515290];\nreturn ids.map(id => ({ json: { source_id: id, url_api_detail: 'https://ekt.kz/api/products/detail?id=' + id } }));"
+        "jsCode": "const ids = [45357,25397,58379,58380,58412,58368,58378,515279,515280,515278,515282,515283,515281,515290,515292,515286,515287,515289,515293,515285,515291,515288,515277,515284,19988,25010,35604,35819,35587,35563,35574,35585,35609,35608,35610,35599,35600,35573,35601,35581];\nreturn ids.map(id => ({ json: { source_id: id, url_api_detail: 'https://ekt.kz/api/products/detail?id=' + id } }));"
       }
     },
     {
@@ -63,13 +69,13 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        920,
         0
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const rows = $input.all().map(item => item.json);\nreturn rows.map(d => {\n  const sku = String(d.article ?? '').trim();\n  const name = String(d.name ?? '').trim();\n  const price = Number(d.price);\n  const stock = Number(d.quantity);\n  const productUrl = String(d.url ?? '').trim();\n  if (!sku || !name || !Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0 || !productUrl.startsWith('https://ekt.kz/catalog/')) {\n    throw new Error('Invalid product detail for id ' + String(d.id ?? '?'));\n  }\n  const path = productUrl.slice('https://ekt.kz'.length).split('/').filter(Boolean);\n  const category = path.slice(1, -1).join('/') || 'uncategorized';\n  const byWarehouse = {};\n  for (const store of Array.isArray(d.stores) ? d.stores : []) {\n    const warehouse = String(store.name ?? '').trim();\n    const quantity = Number(store.quantity);\n    if (warehouse && Number.isInteger(quantity) && quantity >= 0) byWarehouse[warehouse] = quantity;\n  }\n  const attributes = { ...(d.properties && typeof d.properties === 'object' ? d.properties : {}), description: d.description ?? null, image_url: d.image ?? null, source_id: d.id, category_source: 'url_path' };\n  return { json: { sku, name, category, price, stock_total: stock, stock_by_warehouse: byWarehouse, attributes, certificate_url: null, product_url: productUrl } };\n});"
+        "jsCode": "const parseNumber = value => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '' && /^[-+]?\\d+(?:\\.\\d+)?$/.test(value.trim()))) ? Number(value) : NaN;\nconst rows = $input.all().map(item => item.json);\nconst expected = $('Sample product IDs').all().map(item => item.json.source_id);\nif (rows.length !== expected.length || new Set(rows.map(d => d.id)).size !== expected.length || rows.some(d => !expected.includes(d.id))) throw new Error('Incomplete or mismatched API product batch');\nconst seen = new Set();\nreturn rows.map(d => {\n  const sku = String(d.article ?? '').trim();\n  const name = String(d.name ?? '').trim();\n  const price = parseNumber(d.price);\n  const stock = parseNumber(d.quantity);\n  const productUrl = String(d.url ?? '').trim();\n  if (!sku || !name || d.price == null || d.quantity == null || seen.has(sku) || !Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0 || !productUrl.startsWith('https://ekt.kz/catalog/')) {\n    throw new Error('Invalid product detail for id ' + String(d.id ?? '?'));\n  }\n  seen.add(sku);\n  const path = productUrl.slice('https://ekt.kz'.length).split('/').filter(Boolean);\n  const category = path.slice(1, -1).join('/') || 'uncategorized';\n  const byWarehouse = {};\n  for (const store of Array.isArray(d.stores) ? d.stores : []) {\n    const warehouse = String(store.name ?? '').trim();\n    const quantity = parseNumber(store.quantity);\n    if (!warehouse || !Number.isInteger(quantity) || quantity < 0) throw new Error('Invalid warehouse stock for id ' + String(d.id));\n    byWarehouse[warehouse] = quantity;\n  }\n  const attributes = { ...(d.properties && typeof d.properties === 'object' ? d.properties : {}), description: d.description ?? null, image_url: d.image ?? null, source_id: d.id, category_source: 'url_path', api_offers: Array.isArray(d.offers) ? d.offers : [] };\n  return { json: { sku, name, category, price, stock_total: stock, stock_by_warehouse: byWarehouse, attributes, certificate_url: null, product_url: productUrl } };\n});"
       }
     },
     {
@@ -78,7 +84,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        960,
+        1160,
         0
       ],
       "parameters": {
@@ -86,7 +92,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO products (sku, name, category, price, stock_total, stock_by_warehouse, attributes, certificate_url, product_url, updated_at)\nVALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, now())\nON CONFLICT (sku) DO UPDATE SET\n  name = EXCLUDED.name,\n  category = EXCLUDED.category,\n  price = EXCLUDED.price,\n  stock_total = EXCLUDED.stock_total,\n  stock_by_warehouse = EXCLUDED.stock_by_warehouse,\n  attributes = EXCLUDED.attributes,\n  certificate_url = COALESCE(EXCLUDED.certificate_url, products.certificate_url),\n  product_url = EXCLUDED.product_url,\n  updated_at = now()\nRETURNING sku, name, price, stock_total, product_url",
         "options": {
-          "queryBatching": "independently",
+          "queryBatching": "transaction",
           "queryReplacement": "={{ [$json.sku, $json.name, $json.category, $json.price, $json.stock_total, JSON.stringify($json.stock_by_warehouse), JSON.stringify($json.attributes), $json.certificate_url, $json.product_url] }}"
         }
       },
@@ -96,20 +102,58 @@
           "name": "Postgres account"
         }
       }
+    },
+    {
+      "id": "cccda5c0-47b5-49e5-8492-4184ba4f562c",
+      "name": "Existing catalog coverage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n SELECT value AS source_id FROM jsonb_array_elements_text($1::jsonb)\n), matched AS (\n SELECT p.* FROM products p JOIN expected e ON p.attributes->>'source_id'=e.source_id\n)\nSELECT (SELECT count(*)::int FROM expected) AS expected_count,\n (SELECT count(DISTINCT attributes->>'source_id')::int FROM matched) AS found_count,\n coalesce((SELECT jsonb_agg(e.source_id) FROM expected e WHERE NOT EXISTS (SELECT 1 FROM matched m WHERE m.attributes->>'source_id'=e.source_id)), '[]'::jsonb) AS missing_ids,\n coalesce((SELECT jsonb_agg(jsonb_build_object('source_id',attributes->>'source_id','sku',sku,'name',name,'price',price,'currency',currency,'stock_total',stock_total,'warehouse_count',(SELECT count(*) FROM jsonb_object_keys(stock_by_warehouse)),'updated_at',updated_at) ORDER BY sku) FROM matched),'[]'::jsonb) AS products",
+        "options": {
+          "queryReplacement": "={{ [\"[45357,25397,58379,58380,58412,58368,58378,515279,515280,515278,515282,515283,515281,515290,515292,515286,515287,515289,515293,515285,515291,515288,515277,515284,19988,25010,35604,35819,35587,35563,35574,35585,35609,35608,35610,35599,35600,35573,35601,35581]\"] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "c1bbe8b4-15de-41cb-b651-c3052dff7f62",
+      "name": "Verify PDF catalog coverage",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "WITH expected AS (\n SELECT value AS source_id FROM jsonb_array_elements_text($1::jsonb)\n), matched AS (\n SELECT p.* FROM products p JOIN expected e ON p.attributes->>'source_id'=e.source_id\n)\nSELECT (SELECT count(*)::int FROM expected) AS expected_count,\n (SELECT count(DISTINCT attributes->>'source_id')::int FROM matched) AS found_count,\n coalesce((SELECT jsonb_agg(e.source_id) FROM expected e WHERE NOT EXISTS (SELECT 1 FROM matched m WHERE m.attributes->>'source_id'=e.source_id)), '[]'::jsonb) AS missing_ids,\n coalesce((SELECT jsonb_agg(jsonb_build_object('source_id',attributes->>'source_id','sku',sku,'name',name,'price',price,'currency',currency,'stock_total',stock_total,'warehouse_count',(SELECT count(*) FROM jsonb_object_keys(stock_by_warehouse)),'updated_at',updated_at) ORDER BY sku) FROM matched),'[]'::jsonb) AS products",
+        "options": {
+          "queryReplacement": "={{ [\"[45357,25397,58379,58380,58412,58368,58378,515279,515280,515278,515282,515283,515281,515290,515292,515286,515287,515289,515293,515285,515291,515288,515277,515284,19988,25010,35604,35819,35587,35563,35574,35585,35609,35608,35610,35599,35600,35573,35601,35581]\"] }}"
+        }
+      },
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
     }
   ],
   "connections": {
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Sample product IDs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Sample product IDs": {
       "main": [
         [
@@ -142,6 +186,39 @@
           }
         ]
       ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Existing catalog coverage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existing catalog coverage": {
+      "main": [
+        [
+          {
+            "node": "Sample product IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert products": {
+      "main": [
+        [
+          {
+            "node": "Verify PDF catalog coverage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -150,7 +227,7 @@
     "availableInMCP": true,
     "binaryMode": "separate"
   },
-  "versionId": "1c14fd0a-6631-4087-a6ac-7f2346c67b76",
+  "versionId": "98407810-8a00-4615-b65b-b8d424c3b4d6",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"

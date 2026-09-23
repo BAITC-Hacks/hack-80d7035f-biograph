@@ -1,4 +1,4 @@
-Рабочая страница: ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site.
+Рабочая страница: ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site
 # ekt.kz AI assistant
 
 Чат-консультант для ekt.kz: поиск товаров, характеристики, остатки по складам, сертификаты, аналоги и условия покупки. Цена и наличие берутся только из базы каталога.

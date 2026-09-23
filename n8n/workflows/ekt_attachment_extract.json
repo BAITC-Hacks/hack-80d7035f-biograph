@@ -96,7 +96,7 @@
               "fileType": "base64",
               "binaryPropertyName": "data",
               "fileName": "={{ $json.file_name }}",
-              "imageDetail": "auto"
+              "imageDetail": "high"
             }
           ]
         },
@@ -333,5 +333,5 @@
   },
   "active": false,
   "pinData": {},
-  "versionId": "b5f71f56-cb2b-4ae0-b786-bfb661ee4b8b"
+  "versionId": "231e266c-986a-4a41-8417-e35a31b66883"
 }

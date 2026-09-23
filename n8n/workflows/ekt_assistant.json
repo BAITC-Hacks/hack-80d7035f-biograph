@@ -2,6 +2,17 @@
   "name": "ekt_assistant",
   "nodes": [
     {
+      "parameters": {
+        "public": true,
+        "options": {
+          "inputPlaceholder": "Спросите о товаре, наличии или доставке",
+          "loadPreviousSession": "notSupported",
+          "subtitle": "Помогу с товаром, наличием, аналогами и условиями покупки",
+          "title": "Консультант ekt.kz",
+          "responseMode": "streaming"
+        },
+        "initialMessages": "Здравствуйте! Я консультант ekt.kz. Помогу найти товар, проверить наличие и условия покупки."
+      },
       "id": "01ff8fb3-7ad5-46fd-bf20-462c00d1ccfd",
       "name": "Chat Trigger",
       "type": "@n8n/n8n-nodes-langchain.chatTrigger",
@@ -10,21 +21,15 @@
         0,
         112
       ],
-      "parameters": {
-        "public": true,
-        "mode": "hostedChat",
-        "authentication": "none",
-        "options": {
-          "inputPlaceholder": "Спросите о товаре, наличии или доставке",
-          "loadPreviousSession": "notSupported",
-          "subtitle": "Помогу с товаром, наличием, аналогами и условиями покупки",
-          "title": "Консультант ekt.kz",
-          "responseMode": "streaming"
-        }
-      },
       "webhookId": "c2829b2f-91dc-4808-9af4-c027923c0d44"
     },
     {
+      "parameters": {
+        "options": {
+          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Для точного товара используй get_product. Если остаток нулевой, обязательно вызови find_analogs и передай source_article — точный артикул (sku) из get_product, не технический ID вызова. Объясни конкретные совпадения и отличия аналогов из поля reason. Для условий покупки вызови purchase_terms, в том числе для комбинированного вопроса; сообщай только подтверждённое инструментом, не придумывай минимальную партию или тарифы. Товары TEST-* — синтетические демонстрационные данные, явно помечай их тестовыми; не представляй их ссылки как реальные сертификаты или карточки ekt.kz. Отвечай на языке клиента (русский или казахский), кратко и списком. Если клиент хочет добавить товар, узнай точный артикул и количество, затем вызови prepare_cart_intent. При status=awaiting_confirmation повтори артикул и количество и попроси отдельное явное подтверждение: «Да, добавь» или «Иә, қос». Не вызывай confirm_add_to_cart в том же сообщении. На следующем сообщении, если клиент явно согласился, вызови confirm_add_to_cart. Если клиент отказался, не добавляй товар. Только при result.status=added сообщи, что товар в корзине, и выдай cart_url из инструмента. При любом ином статусе не утверждай, что корзина изменена. Это прототипная корзина, не корзина сайта ekt.kz; не называй её корзиной ekt.kz. Не оформляй заказ и не запрашивай платёжные данные.",
+          "maxIterations": 8
+        }
+      },
       "id": "3f9c65a2-742f-4e9e-ba79-adab1dcd8836",
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -32,16 +37,20 @@
       "position": [
         480,
         112
-      ],
-      "parameters": {
-        "promptType": "auto",
-        "options": {
-          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Если остаток товара равен нулю, сам вызови find_analogs и объясни, почему аналоги похожи и чем отличаются. Отвечай на языке клиента (русский или казахский), кратко и списком. Для товара используй search_products и get_product, для условий purchase_terms. Если клиент хочет добавить товар, узнай точный артикул и количество, затем вызови prepare_cart_intent. При status=awaiting_confirmation повтори артикул и количество и попроси отдельное явное подтверждение: «Да, добавь» или «Иә, қос». Не вызывай confirm_add_to_cart в том же сообщении. На следующем сообщении, если клиент явно согласился, вызови confirm_add_to_cart. Только при result.status=added сообщи, что товар в корзине, и выдай cart_url из инструмента. При любом ином статусе не утверждай, что корзина изменена. Это прототипная корзина, не корзина сайта ekt.kz; не называй её корзиной ekt.kz. Не оформляй заказ и не запрашивай платёжные данные.",
-          "maxIterations": 8
-        }
-      }
+      ]
     },
     {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-6-luna",
+          "mode": "list",
+          "cachedResultName": "gpt-6-luna"
+        },
+        "options": {
+          "maxRetries": 2
+        }
+      },
       "id": "901b7651-d6e9-47c3-9901-69070bf4249a",
       "name": "OpenAI Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
@@ -50,18 +59,6 @@
         224,
         336
       ],
-      "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "gpt-6-luna",
-          "mode": "list",
-          "cachedResultName": "gpt-6-luna"
-        },
-        "responsesApiEnabled": true,
-        "options": {
-          "maxRetries": 2
-        }
-      },
       "credentials": {
         "openAiApi": {
           "id": "DKRSP2zCfPIY9gQ8",
@@ -70,6 +67,9 @@
       }
     },
     {
+      "parameters": {
+        "contextWindowLength": 10
+      },
       "id": "a3caa973-37f8-44fd-80ac-42416c830c80",
       "name": "Postgres Chat Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
@@ -78,11 +78,6 @@
         352,
         336
       ],
-      "parameters": {
-        "sessionIdType": "fromInput",
-        "tableName": "n8n_chat_histories",
-        "contextWindowLength": 10
-      },
       "credentials": {
         "postgres": {
           "id": "5w8BOoSHZHAigXqZ",
@@ -91,6 +86,14 @@
       }
     },
     {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, sku, name, category, price, stock_total, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
+        "options": {
+          "queryReplacement": "={{ $fromAI('query', 'Поисковая фраза или артикул', 'string') }}"
+        },
+        "toolDescription": "Use when the customer gives a name, partial name, or SKU/article and needs up to five matching products. Do not use it to invent price or stock."
+      },
       "id": "492b9395-7921-411d-8906-4abe3ac06f5a",
       "name": "search_products",
       "type": "n8n-nodes-base.postgresTool",
@@ -99,15 +102,6 @@
         480,
         336
       ],
-      "parameters": {
-        "resource": "database",
-        "operation": "executeQuery",
-        "query": "SELECT id, sku, name, category, price, stock_total, attributes, certificate_url, product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
-        "toolDescription": "Use when the customer gives a name, partial name, or SKU/article and needs up to five matching products. Do not use it to invent price or stock.",
-        "options": {
-          "queryReplacement": "={{ $fromAI('query', 'Поисковая фраза или артикул', 'string') }}"
-        }
-      },
       "credentials": {
         "postgres": {
           "id": "5w8BOoSHZHAigXqZ",
@@ -116,6 +110,14 @@
       }
     },
     {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, sku, name, category, price, stock_total, stock_by_warehouse, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
+        "options": {
+          "queryReplacement": "={{ $fromAI('id_or_article', 'Product id or article/SKU', 'string') }}"
+        },
+        "toolDescription": "Use when the customer needs an exact product by id or SKU/article, including price, stock by warehouse, specifications, certificate, or ekt.kz product URL. Source of truth for price and availability."
+      },
       "id": "5d3c8d03-96c1-49de-b215-ff91421be8ed",
       "name": "get_product",
       "type": "n8n-nodes-base.postgresTool",
@@ -124,15 +126,6 @@
         608,
         336
       ],
-      "parameters": {
-        "resource": "database",
-        "operation": "executeQuery",
-        "query": "SELECT id, sku, name, category, price, stock_total, stock_by_warehouse, attributes, certificate_url, product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
-        "toolDescription": "Use when the customer needs an exact product by id or SKU/article, including price, stock by warehouse, specifications, certificate, or ekt.kz product URL. Source of truth for price and availability.",
-        "options": {
-          "queryReplacement": "={{ $fromAI('id_or_article', 'Product id or article/SKU', 'string') }}"
-        }
-      },
       "credentials": {
         "postgres": {
           "id": "5w8BOoSHZHAigXqZ",
@@ -141,6 +134,14 @@
       }
     },
     {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH src AS (\n  SELECT * FROM products WHERE sku = $1 OR id::text = $1 LIMIT 1\n)\nSELECT p.id, p.sku, p.name, p.category, p.price, p.stock_total,\n       p.attributes, p.product_url, src.name AS source_name,\n       src.price AS source_price, src.attributes AS source_attributes,\n       CONCAT(\n         'Та же категория: ', p.category,\n         '; совпадает: ', COALESCE((\n           SELECT string_agg(e.key || '=' || e.value, ', ' ORDER BY e.key)\n           FROM jsonb_each_text(src.attributes) e\n           WHERE p.attributes->>e.key = e.value\n         ), 'общая категория'),\n         '; отличается: ', COALESCE((\n           SELECT string_agg(e.key || ': ' || e.value || ' → ' ||\n                             (p.attributes->>e.key), ', ' ORDER BY e.key)\n           FROM jsonb_each_text(src.attributes) e\n           WHERE p.attributes ? e.key\n             AND p.attributes->>e.key IS DISTINCT FROM e.value\n         ), 'указанные характеристики совпадают'),\n         '; цена ', p.price, ' KZT против ', src.price, ' KZT'\n       ) AS reason\nFROM src\nJOIN products p ON p.category = src.category\nWHERE p.stock_total > 0 AND p.id <> src.id\nORDER BY CASE\n  WHEN p.embedding IS NOT NULL AND src.embedding IS NOT NULL\n   AND vector_dims(p.embedding) = vector_dims(src.embedding)\n  THEN p.embedding <=> src.embedding\n  ELSE 1 - similarity(p.name, src.name)\nEND\nLIMIT 5",
+        "options": {
+          "queryReplacement": "={{ $fromAI('source_article', 'Exact source product SKU/article returned by get_product; never a tool call ID', 'string') }}"
+        },
+        "toolDescription": "Call after get_product reports stock_total=0, or when customer asks for an analog. Pass the exact source SKU/article from get_product as source_article. Returns up to five in-stock same-category products with concrete shared and differing attributes and price comparison."
+      },
       "id": "5c5f8b8d-5c94-4909-baa5-da8a0bdab9bf",
       "name": "find_analogs",
       "type": "n8n-nodes-base.postgresTool",
@@ -149,15 +150,6 @@
         736,
         336
       ],
-      "parameters": {
-        "resource": "database",
-        "operation": "executeQuery",
-        "query": "SELECT\n  p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url,\n  src.name AS source_name, src.price AS source_price, src.attributes AS source_attributes,\n  CONCAT(\n    'Та же категория; сходство названий ', ROUND(similarity(p.name, src.name) * 100), '%; ',\n    CASE\n      WHEN p.price = src.price THEN 'цена совпадает'\n      WHEN p.price > src.price THEN 'дороже на ' || (p.price - src.price)::text || ' KZT'\n      ELSE 'дешевле на ' || (src.price - p.price)::text || ' KZT'\n    END,\n    '; сравните технические характеристики с исходным товаром'\n  ) AS reason\nFROM products p\nJOIN products src ON src.id::text = $1\nWHERE p.category = src.category\n  AND p.stock_total > 0\n  AND p.id <> src.id\nORDER BY CASE\n  WHEN p.embedding IS NOT NULL AND src.embedding IS NOT NULL\n    AND vector_dims(p.embedding) = vector_dims(src.embedding)\n    THEN p.embedding <=> src.embedding\n  ELSE 1 - similarity(p.name, src.name)\nEND\nLIMIT 5",
-        "toolDescription": "Use after get_product shows stock_total is zero, or when the customer explicitly asks for an analog. Returns in-stock products in the same category with a reason.",
-        "options": {
-          "queryReplacement": "={{ $fromAI('id', 'Product id', 'string') }}"
-        }
-      },
       "credentials": {
         "postgres": {
           "id": "5w8BOoSHZHAigXqZ",
@@ -166,6 +158,14 @@
       }
     },
     {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT question, answer FROM terms t\nWHERE EXISTS (\n  SELECT 1 FROM unnest(t.keywords) AS k\n  WHERE length(k) >= 4\n    AND lower($1) LIKE '%' || left(lower(k), 4) || '%'\n)\nOR question ILIKE '%' || $1 || '%'\nORDER BY question LIMIT 8",
+        "options": {
+          "queryReplacement": "={{ String($('Chat Trigger').first().json.chatInput || '').replace(/[,;\\n]/g, ' ') }}"
+        },
+        "toolDescription": "Call for delivery, payment, minimum quantity, or other purchase terms. Supports combined questions by matching topic keywords in terms. Answer only from returned rows; if no row, say the condition is unconfirmed."
+      },
       "id": "0e4953d3-6c46-447d-80b3-2c7a726d7566",
       "name": "purchase_terms",
       "type": "n8n-nodes-base.postgresTool",
@@ -174,15 +174,6 @@
         864,
         336
       ],
-      "parameters": {
-        "resource": "database",
-        "operation": "executeQuery",
-        "query": "SELECT question, answer FROM terms WHERE question ILIKE '%' || $1 || '%' OR answer ILIKE '%' || $1 || '%' ORDER BY question LIMIT 5",
-        "toolDescription": "Use for delivery, payment, minimum order, return, or other purchase terms. Answer only from the returned terms.",
-        "options": {
-          "queryReplacement": "={{ $fromAI('question', 'Customer question about purchase terms', 'string') }}"
-        }
-      },
       "credentials": {
         "postgres": {
           "id": "5w8BOoSHZHAigXqZ",
@@ -346,11 +337,10 @@
     "availableInMCP": true,
     "binaryMode": "separate"
   },
-  "versionId": "55cf1879-f352-4d4d-a47d-5b5adc16efcf",
+  "versionId": "2989ccba-6448-4551-8f0b-c1ed37411c52",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"
   },
   "pinData": {}
 }
-

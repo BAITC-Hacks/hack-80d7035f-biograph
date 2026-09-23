@@ -1,0 +1,162 @@
+name: Fresh-install smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/smoke.yml'
+      - 'docker-compose.yml'
+      - '.env.example'
+      - 'db/**'
+      - 'n8n/workflows/**'
+      - 'site/demo/**'
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: ekt-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run frontend tests
+        run: node site/demo/tests.cjs
+      - name: Create disposable local credentials
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { randomBytes } = require('node:crypto');
+          const password = randomBytes(32).toString('hex');
+          const encryptionKey = randomBytes(32).toString('hex');
+          console.log('::add-mask::' + password);
+          console.log('::add-mask::' + encryptionKey);
+          fs.writeFileSync('.env', [
+            'POSTGRES_DB=ekt_assistant', 'POSTGRES_USER=ekt_ci',
+            'POSTGRES_PASSWORD=' + password, 'POSTGRES_PORT=55432',
+            'N8N_HOST=localhost', 'N8N_PORT=5678',
+            'N8N_ENCRYPTION_KEY=' + encryptionKey, ''
+          ].join('\n'), { mode: 0o600 });
+          NODE
+      - name: Validate Compose and start fresh stack
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env config --quiet
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env up -d
+      - name: Wait for PostgreSQL and n8n migrations
+        run: |
+          postgres_id="$(docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env ps -q postgres)"
+          test -n "$postgres_id"
+          healthy=false
+          for attempt in $(seq 1 60); do
+            if [ "$(docker inspect --format '{{.State.Health.Status}}' "$postgres_id")" = healthy ]; then
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+          test "$healthy" = true
+          ready=false
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent --max-time 3 http://127.0.0.1:5678/healthz/readiness >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = true
+          curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5678/healthz >/dev/null
+      - name: Verify fresh schema and seed data
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env exec -T postgres \
+            psql -X -U ekt_ci -d ekt_assistant -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE table_name text;
+          BEGIN
+            IF (SELECT count(*) FROM pg_extension WHERE extname IN ('vector', 'pg_trgm')) <> 2 THEN
+              RAISE EXCEPTION 'Required extensions missing';
+            END IF;
+            FOREACH table_name IN ARRAY ARRAY['products', 'terms', 'n8n_chat_histories', 'cart_sessions', 'cart_pending', 'cart_items'] LOOP
+              IF to_regclass('public.' || table_name) IS NULL THEN
+                RAISE EXCEPTION 'Required table missing: %', table_name;
+              END IF;
+            END LOOP;
+            IF (SELECT count(*) FROM products) <> 4 OR (SELECT count(*) FROM products WHERE sku IN ('TEST-000','TEST-001','TEST-002','TEST-003')) <> 4 THEN
+              RAISE EXCEPTION 'Expected four synthetic seed products';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM products WHERE sku='TEST-000' AND stock_total=0) OR NOT EXISTS (SELECT 1 FROM products WHERE sku='TEST-001' AND stock_total=14) THEN
+              RAISE EXCEPTION 'Invalid seed stocks';
+            END IF;
+            IF (SELECT count(*) FROM terms) < 4 OR NOT EXISTS (SELECT 1 FROM terms WHERE locale='ru') OR NOT EXISTS (SELECT 1 FROM terms WHERE locale='kk') THEN
+              RAISE EXCEPTION 'Purchase terms missing';
+            END IF;
+            IF to_regprocedure('public.prepare_cart_intent(text,text,integer,text)') IS NULL OR to_regprocedure('public.confirm_add_to_cart(text,boolean,text,text)') IS NULL THEN
+              RAISE EXCEPTION 'Cart confirmation functions missing';
+            END IF;
+            IF EXISTS (SELECT 1 FROM cart_sessions) OR EXISTS (SELECT 1 FROM cart_pending) OR EXISTS (SELECT 1 FROM cart_items) THEN
+              RAISE EXCEPTION 'Fresh database contains cart data';
+            END IF;
+          END $$;
+          SQL
+      - name: Prepare inactive workflows without credentials
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const assert = require('node:assert/strict');
+          const source = 'n8n/workflows';
+          const target = path.join(process.env.RUNNER_TEMP, 'ekt-ci-workflows');
+          fs.mkdirSync(target, { recursive: true });
+          const files = fs.readdirSync(source).filter(name => name.endsWith('.json'));
+          assert.ok(files.length > 0);
+          let count = 0;
+          for (const file of files) {
+            const parsed = JSON.parse(fs.readFileSync(path.join(source, file), 'utf8'));
+            for (const workflow of (Array.isArray(parsed) ? parsed : [parsed])) {
+              assert.ok(Array.isArray(workflow.nodes));
+              assert.ok(workflow.connections && typeof workflow.connections === 'object');
+              workflow.active = false;
+              for (const field of ['id','versionId','activeVersionId','activeVersion','pinData','staticData','shared','tags']) delete workflow[field];
+              for (const node of workflow.nodes) delete node.credentials;
+              fs.writeFileSync(path.join(target, (++count)+'.json'), JSON.stringify(workflow));
+            }
+          }
+          console.log('Prepared '+count+' inactive workflow exports without credentials.');
+          NODE
+      - name: Import workflows without activating
+        run: |
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env cp \
+            "$RUNNER_TEMP/ekt-ci-workflows" n8n:/tmp/ekt-ci-workflows
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env exec -T --user node n8n \
+            n8n import:workflow --separate --input=/tmp/ekt-ci-workflows/ --activeState=false
+          docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env exec -T postgres \
+            psql -X -U ekt_ci -d ekt_assistant -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM workflow_entity) THEN RAISE EXCEPTION 'No workflows imported'; END IF;
+            IF EXISTS (SELECT 1 FROM workflow_entity WHERE active) THEN RAISE EXCEPTION 'CI must not activate workflows'; END IF;
+            IF EXISTS (SELECT 1 FROM credentials_entity) THEN RAISE EXCEPTION 'CI must not contain external credentials'; END IF;
+          END $$;
+          SQL
+          echo 'Fresh-install passed. External APIs and live chat are not tested in CI.'
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          if [ -f .env ]; then
+            docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env ps
+            docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env logs --no-color --tail=100
+          fi
+      - name: Remove this ephemeral CI project only
+        if: always()
+        run: |
+          if [ -f .env ]; then
+            docker compose --project-name "$COMPOSE_PROJECT_NAME" --env-file .env down --volumes --remove-orphans
+          fi

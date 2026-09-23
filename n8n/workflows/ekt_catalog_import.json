@@ -1,0 +1,159 @@
+{
+  "name": "ekt_catalog_import",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8c732be4-b997-4026-bb0e-18ecc12fc29d",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url_api_detail }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "timeout": 90000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "8fe2cfff-87f5-48c8-9adc-e022d86a7307",
+      "name": "Fetch product details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        0
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "YWKc8hUknHdikf7u",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "id": "3448a61d-080f-4a36-878e-04becf921e78",
+      "name": "Sample product IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const ids = [45357,515279,515280,515278,515282,515283,515281,515290];\nreturn ids.map(id => ({ json: { source_id: id, url_api_detail: 'https://ekt.kz/api/products/detail?id=' + id } }));"
+      }
+    },
+    {
+      "id": "25af272e-9e5d-4c95-bd5d-d707ef7775cd",
+      "name": "Normalize product detail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map(item => item.json);\nreturn rows.map(d => {\n  const sku = String(d.article ?? '').trim();\n  const name = String(d.name ?? '').trim();\n  const price = Number(d.price);\n  const stock = Number(d.quantity);\n  const productUrl = String(d.url ?? '').trim();\n  if (!sku || !name || !Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0 || !productUrl.startsWith('https://ekt.kz/catalog/')) {\n    throw new Error('Invalid product detail for id ' + String(d.id ?? '?'));\n  }\n  const path = productUrl.slice('https://ekt.kz'.length).split('/').filter(Boolean);\n  const category = path.slice(1, -1).join('/') || 'uncategorized';\n  const byWarehouse = {};\n  for (const store of Array.isArray(d.stores) ? d.stores : []) {\n    const warehouse = String(store.name ?? '').trim();\n    const quantity = Number(store.quantity);\n    if (warehouse && Number.isInteger(quantity) && quantity >= 0) byWarehouse[warehouse] = quantity;\n  }\n  const attributes = { ...(d.properties && typeof d.properties === 'object' ? d.properties : {}), description: d.description ?? null, image_url: d.image ?? null, source_id: d.id, category_source: 'url_path' };\n  return { json: { sku, name, category, price, stock_total: stock, stock_by_warehouse: byWarehouse, attributes, certificate_url: null, product_url: productUrl } };\n});"
+      }
+    },
+    {
+      "id": "44366f14-428f-452a-8450-c83c300c2e8b",
+      "name": "Upsert products",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "INSERT INTO products (sku, name, category, price, stock_total, stock_by_warehouse, attributes, certificate_url, product_url, updated_at)\nVALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, now())\nON CONFLICT (sku) DO UPDATE SET\n  name = EXCLUDED.name,\n  category = EXCLUDED.category,\n  price = EXCLUDED.price,\n  stock_total = EXCLUDED.stock_total,\n  stock_by_warehouse = EXCLUDED.stock_by_warehouse,\n  attributes = EXCLUDED.attributes,\n  certificate_url = COALESCE(EXCLUDED.certificate_url, products.certificate_url),\n  product_url = EXCLUDED.product_url,\n  updated_at = now()\nRETURNING sku, name, price, stock_total, product_url",
+        "options": {
+          "queryBatching": "independently",
+          "queryReplacement": "={{ [$json.sku, $json.name, $json.category, $json.price, $json.stock_total, JSON.stringify($json.stock_by_warehouse), JSON.stringify($json.attributes), $json.certificate_url, $json.product_url] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sample product IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample product IDs": {
+      "main": [
+        [
+          {
+            "node": "Fetch product details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize product detail": {
+      "main": [
+        [
+          {
+            "node": "Upsert products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch product details": {
+      "main": [
+        [
+          {
+            "node": "Normalize product detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "versionId": "1c14fd0a-6631-4087-a6ac-7f2346c67b76",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "pinData": {}
+}

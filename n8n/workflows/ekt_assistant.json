@@ -148,7 +148,7 @@
       "parameters": {
         "resource": "database",
         "operation": "executeQuery",
-        "query": "SELECT p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url, 'same category; nearest embedding; in stock' AS reason FROM products p WHERE p.category = (SELECT category FROM products WHERE id::text = $1 LIMIT 1) AND p.stock_total > 0 AND p.id::text <> $1 ORDER BY p.embedding <=> (SELECT embedding FROM products WHERE id::text = $1 LIMIT 1) LIMIT 5",
+        "query": "SELECT\n  p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url,\n  CONCAT(\n    'Та же категория; номинальный ток: ', COALESCE(p.attributes ->> 'Номинальный ток', 'не указан'),\n    ' (у исходного: ', COALESCE(src.attributes ->> 'Номинальный ток', 'не указан'), '); ',\n    CASE\n      WHEN p.price = src.price THEN 'цена совпадает'\n      WHEN p.price > src.price THEN 'дороже на ' || (p.price - src.price)::text || ' KZT'\n      ELSE 'дешевле на ' || (src.price - p.price)::text || ' KZT'\n    END\n  ) AS reason\nFROM products p\nJOIN products src ON src.id::text = $1\nWHERE p.category = src.category\n  AND p.stock_total > 0\n  AND p.id <> src.id\nORDER BY p.embedding <=> src.embedding\nLIMIT 5",
         "toolDescription": "Use after get_product shows stock_total is zero, or when the customer explicitly asks for an analog. Returns in-stock products in the same category with a reason.",
         "options": {
           "queryReplacement": "={{ $fromAI('id', 'Product id', 'string') }}"
@@ -276,4 +276,3 @@
   },
   "pinData": {}
 }
-

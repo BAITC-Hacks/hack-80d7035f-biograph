@@ -26,7 +26,7 @@
     {
       "parameters": {
         "options": {
-          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Для точного товара используй get_product. Если остаток нулевой, обязательно вызови find_analogs и передай source_article — точный артикул (sku) из get_product, не технический ID вызова. Объясни конкретные совпадения и отличия аналогов из поля reason. Для условий покупки вызови purchase_terms, в том числе для комбинированного вопроса; сообщай только подтверждённое инструментом, не придумывай минимальную партию или тарифы. Товары TEST-* — синтетические демонстрационные данные, явно помечай их тестовыми; не представляй их ссылки как реальные сертификаты или карточки ekt.kz. Отвечай на языке клиента (русский или казахский), кратко и списком. Если клиент хочет добавить товар, узнай точный артикул и количество, затем вызови prepare_cart_intent. При status=awaiting_confirmation повтори артикул и количество и попроси отдельное явное подтверждение: «Да, добавь» или «Иә, қос». Не вызывай confirm_add_to_cart в том же сообщении. На следующем сообщении, если клиент явно согласился, вызови confirm_add_to_cart. Если клиент отказался, не добавляй товар. Только при result.status=added сообщи, что товар в корзине, и выдай cart_url из инструмента. При любом ином статусе не утверждай, что корзина изменена. Это прототипная корзина, не корзина сайта ekt.kz; не называй её корзиной ekt.kz. Не оформляй заказ и не запрашивай платёжные данные.",
+          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Для точного товара используй get_product. Если остаток нулевой, обязательно вызови find_analogs и передай source_article — точный артикул (sku) из get_product, не технический ID вызова. Объясни конкретные совпадения и отличия аналогов из поля reason. Для условий покупки вызови purchase_terms, в том числе для комбинированного вопроса; сообщай только подтверждённое инструментом, не придумывай минимальную партию или тарифы. Товары TEST-* — синтетические демонстрационные данные, явно помечай их тестовыми; не представляй их ссылки как реальные сертификаты или карточки ekt.kz. Отвечай на языке клиента (русский или казахский), кратко и списком. Если клиент хочет добавить товар, узнай точный артикул и количество, затем вызови prepare_cart_intent. При status=awaiting_confirmation повтори артикул и количество и попроси отдельное явное подтверждение: «Да, добавь» или «Иә, қос». Не вызывай confirm_add_to_cart в том же сообщении. На следующем сообщении, если клиент явно согласился, вызови confirm_add_to_cart. Если клиент отказался, не добавляй товар. Только при result.status=added сообщи, что товар в корзине, и выдай cart_url из инструмента. При любом ином статусе не утверждай, что корзина изменена. Это прототипная корзина, не корзина сайта ekt.kz; не называй её корзиной ekt.kz. Не оформляй заказ и не запрашивай платёжные данные.\nСогласие действительно только непосредственно следующим сообщением после предложения товара. Любое другое сообщение автоматически отменяет прежнее ожидание: не подтверждай старое намерение из памяти, предложи товар и запроси согласие заново. «Да, добавь!» и «Иә, қос.» считаются явным согласием; нельзя считать согласием условные фразы или отрицания.\nКогда клиент спрашивает состав корзины, сумму или ссылку на неё, вызывай get_cart; это чтение без изменения. Отображай найденный URL дословно, не придумывай. Для условий покупки предпочитай проверенные записи со ссылкой ekt.kz; переводя на казахский, сохраняй точные суммы и пороги.",
           "maxIterations": 8
         }
       },
@@ -90,7 +90,7 @@
         "operation": "executeQuery",
         "query": "SELECT id, sku, name, category, price, currency, stock_total, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
         "options": {
-          "queryReplacement": "={{ $fromAI('query', 'Поисковая фраза или артикул', 'string') }}"
+          "queryReplacement": "={{ [$fromAI('query', 'Поисковая фраза или артикул', 'string')] }}"
         },
         "toolDescription": "Use when the customer gives a name, partial name, or SKU/article and needs up to five matching products. Do not use it to invent price or stock."
       },
@@ -114,7 +114,7 @@
         "operation": "executeQuery",
         "query": "SELECT id, sku, name, category, price, currency, stock_total, stock_by_warehouse, attributes, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE certificate_url END AS certificate_url, CASE WHEN sku LIKE 'TEST-%' THEN NULL ELSE product_url END AS product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
         "options": {
-          "queryReplacement": "={{ $fromAI('id_or_article', 'Product id or article/SKU', 'string') }}"
+          "queryReplacement": "={{ [$fromAI('id_or_article', 'Product id or article/SKU', 'string')] }}"
         },
         "toolDescription": "Use when the customer needs an exact product by id or SKU/article, including price, stock by warehouse, specifications, certificate, or ekt.kz product URL. Source of truth for price and availability."
       },
@@ -138,7 +138,7 @@
         "operation": "executeQuery",
         "query": "WITH src AS (\n  SELECT * FROM products WHERE sku = $1 OR id::text = $1 LIMIT 1\n)\nSELECT p.id, p.sku, p.name, p.category, p.price, p.stock_total,\n       p.attributes, p.product_url, src.name AS source_name,\n       src.price AS source_price, src.attributes AS source_attributes,\n       CONCAT(\n         'Та же категория: ', p.category,\n         '; совпадает: ', COALESCE((\n           SELECT string_agg(e.key || '=' || e.value, ', ' ORDER BY e.key)\n           FROM jsonb_each_text(src.attributes) e\n           WHERE p.attributes->>e.key = e.value\n         ), 'общая категория'),\n         '; отличается: ', COALESCE((\n           SELECT string_agg(e.key || ': ' || e.value || ' → ' ||\n                             (p.attributes->>e.key), ', ' ORDER BY e.key)\n           FROM jsonb_each_text(src.attributes) e\n           WHERE p.attributes ? e.key\n             AND p.attributes->>e.key IS DISTINCT FROM e.value\n         ), 'указанные характеристики совпадают'),\n         '; цена ', p.price, ' KZT против ', src.price, ' KZT'\n       ) AS reason\nFROM src\nJOIN products p ON p.category = src.category\nWHERE p.stock_total > 0 AND p.id <> src.id\nORDER BY CASE\n  WHEN p.embedding IS NOT NULL AND src.embedding IS NOT NULL\n   AND vector_dims(p.embedding) = vector_dims(src.embedding)\n  THEN p.embedding <=> src.embedding\n  ELSE 1 - similarity(p.name, src.name)\nEND\nLIMIT 5",
         "options": {
-          "queryReplacement": "={{ $fromAI('source_article', 'Exact source product SKU/article returned by get_product; never a tool call ID', 'string') }}"
+          "queryReplacement": "={{ [$fromAI('source_article', 'Exact source product SKU/article returned by get_product; never a tool call ID', 'string')] }}"
         },
         "toolDescription": "Call after get_product reports stock_total=0, or when customer asks for an analog. Pass the exact source SKU/article from get_product as source_article. Returns up to five in-stock same-category products with concrete shared and differing attributes and price comparison."
       },
@@ -160,9 +160,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT question, answer FROM terms t\nWHERE EXISTS (\n  SELECT 1 FROM unnest(t.keywords) AS k\n  WHERE length(k) >= 4\n    AND lower($1) LIKE '%' || left(lower(k), 4) || '%'\n)\nOR question ILIKE '%' || $1 || '%'\nORDER BY question LIMIT 8",
+        "query": "WITH q AS (\n SELECT replace(replace(replace(replace(lower($1),'жеткіз','достав'),'төле','оплат'),'ең аз','миним'),'ең төмен','миним') AS text\n)\nSELECT question,answer FROM terms t CROSS JOIN q\nWHERE EXISTS(SELECT 1 FROM unnest(t.keywords) AS k\n WHERE length(k)>=4 AND q.text LIKE '%'||left(lower(k),4)||'%')\n OR question ILIKE '%'||$1||'%'\nORDER BY (answer LIKE '%https://ekt.kz/%') DESC, question LIMIT 8",
         "options": {
-          "queryReplacement": "={{ String($('Chat Trigger').first().json.chatInput || '').replace(/[,;\\n]/g, ' ') }}"
+          "queryReplacement": "={{ [String($('Chat Trigger').first().json.chatInput || '')] }}"
         },
         "toolDescription": "Call for delivery, payment, minimum quantity, or other purchase terms. Supports combined questions by matching topic keywords in terms. Answer only from returned rows; if no row, say the condition is unconfirmed."
       },
@@ -194,7 +194,7 @@
         "operation": "executeQuery",
         "query": "SELECT prepare_cart_intent($1, $2, $3::integer, $4) AS result",
         "options": {
-          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId, $fromAI('sku', 'Exact product SKU/article', 'string'), $fromAI('quantity', 'Positive integer quantity', 'number'), $execution.id].join(',') }}"
+          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId, $fromAI('sku','Exact product SKU/article','string'), $fromAI('quantity','Positive integer quantity','number'), $execution.id] }}"
         },
         "toolDescription": "Use when customer asks to add a specific SKU and quantity. Only prepares an item, does not change the cart. Repeat SKU and quantity and ask for a separate explicit yes."
       },
@@ -218,9 +218,57 @@
         "operation": "executeQuery",
         "query": "SELECT confirm_add_to_cart($1, $2::boolean, $3, $4) AS result",
         "options": {
-          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId, /^(?:да(?:[,!\\s]*(?:добавь|добавляй|добавить|в корзину))?|иә(?:[,!\\s]*(?:қос|себетке қос))?)$/iu.test(String($('Chat Trigger').first().json.chatInput || '').trim()), $execution.id, 'https://marindsain8n.ru/webhook/ekt-cart'].join(',') }}"
+          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId, /^(?:да(?:[,\\s]+(?:добавь|добавляй|добавить|в корзину))?|иә(?:[,\\s]+(?:қос|себетке қос))?)[.!]*$/iu.test(String($('Chat Trigger').first().json.chatInput || '').trim()), $execution.id, 'https://marindsain8n.ru/webhook/ekt-cart'] }}"
         },
         "toolDescription": "Use only after prepare_cart_intent returned awaiting_confirmation in a previous message and current customer message explicitly confirms. SQL independently checks raw-message consent, pending item, expiry, separate execution and stock. Never claim success unless status is added."
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "efa080dd-24e9-4357-ba5d-c3e14007b5c1",
+      "name": "Guard chat and cart confirmation",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -260,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH cancelled AS (\n DELETE FROM cart_pending WHERE session_id = $1 AND NOT $3::boolean RETURNING session_id\n)\nSELECT $1::text AS \"sessionId\", $2::text AS \"chatInput\",\n $3::boolean AS explicit_confirmation, (SELECT count(*) FROM cancelled) AS cleared_pending;",
+        "options": {
+          "queryReplacement": "={{ (() => { const sid = String($json.sessionId || ''); const input = String($json.chatInput || '').trim(); if (!/^[A-Za-z0-9_-]{8,128}$/.test(sid)) throw new Error('Invalid chat session'); if (!input || input.length > 6000) throw new Error('Message must contain 1–6000 characters'); return [sid,input,/^(?:да(?:[,\\s]+(?:добавь|добавляй|добавить|в корзину))?|иә(?:[,\\s]+(?:қос|себетке қос))?)[.!]*$/iu.test(String($('Chat Trigger').first().json.chatInput || '').trim())]; })() }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "63836f66-4bb1-4530-94a5-6dffbffb39d3",
+      "name": "get_cart",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        900,
+        600
+      ],
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Call when the customer asks to view their current demo cart, total, or cart link. Read-only; never adds or removes items.",
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object(\n 'status', CASE WHEN EXISTS (SELECT 1 FROM cart_items WHERE session_id=$1) THEN 'ok' ELSE 'empty' END,\n 'items', coalesce((SELECT jsonb_agg(jsonb_build_object('sku',p.sku,'name',p.name,'quantity',i.quantity,'unit_price',p.price,'currency',p.currency,'stock_total',p.stock_total)) FROM cart_items i JOIN products p ON p.sku=i.sku WHERE i.session_id=$1),'[]'::jsonb),\n 'cart_url', (SELECT 'https://marindsain8n.ru/webhook/ekt-cart?token='||token::text FROM cart_sessions WHERE session_id=$1),\n 'note','Prototype cart only; no order or payment is created'\n) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId] }}"
+        }
       },
       "credentials": {
         "postgres": {
@@ -231,17 +279,6 @@
     }
   ],
   "connections": {
-    "Chat Trigger": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "OpenAI Chat Model": {
       "ai_languageModel": [
         [
@@ -329,6 +366,39 @@
           }
         ]
       ]
+    },
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Guard chat and cart confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard chat and cart confirmation": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_cart": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -337,7 +407,7 @@
     "availableInMCP": true,
     "binaryMode": "separate"
   },
-  "versionId": "091232d9-7e73-4550-9c9e-01cea809e5cf",
+  "versionId": "38a9f943-5319-4ff4-b3bf-6fa9f9f5d2b6",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"

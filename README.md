@@ -1,6 +1,6 @@
 Рабочая страница: ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site.
 Рабочая страница: ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site
-# ekt.kz AI assistant
+# ekt.kz AI assistant (https://ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site/) 
 
 [Открыть публичное демо](https://ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site/) · [Каталог товаров](https://ekt-assistant-hackalem-2026.koncevojdanila10.chatgpt.site/#catalog) · [Результаты проверок](TEST_REPORT.md)
 

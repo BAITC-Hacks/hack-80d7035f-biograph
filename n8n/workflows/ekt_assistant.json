@@ -15,11 +15,11 @@
         "mode": "hostedChat",
         "authentication": "none",
         "options": {
-          "responseMode": "streaming",
-          "loadPreviousSession": "notSupported",
           "inputPlaceholder": "Спросите о товаре, наличии или доставке",
+          "loadPreviousSession": "notSupported",
+          "subtitle": "Помогу с товаром, наличием, аналогами и условиями покупки",
           "title": "Консультант ekt.kz",
-          "subtitle": "Помогу с товаром, наличием, аналогами и условиями покупки"
+          "responseMode": "streaming"
         }
       },
       "webhookId": "c2829b2f-91dc-4808-9af4-c027923c0d44"
@@ -36,7 +36,7 @@
       "parameters": {
         "promptType": "auto",
         "options": {
-          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Если остаток товара равен нулю, сам вызови find_analogs и объясни, почему предложенные аналоги похожи и чем отличаются. Отвечай на языке клиента (русский или казахский), кратко и списком. Для поиска используй только инструменты search_products, get_product, find_analogs и purchase_terms. Не меняй корзину и не оформляй заказ.",
+          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Если остаток товара равен нулю, сам вызови find_analogs и объясни, почему аналоги похожи и чем отличаются. Отвечай на языке клиента (русский или казахский), кратко и списком. Для товара используй search_products и get_product, для условий purchase_terms. Если клиент хочет добавить товар, узнай точный артикул и количество, затем вызови prepare_cart_intent. При status=awaiting_confirmation повтори артикул и количество и попроси отдельное явное подтверждение: «Да, добавь» или «Иә, қос». Не вызывай confirm_add_to_cart в том же сообщении. На следующем сообщении, если клиент явно согласился, вызови confirm_add_to_cart. Только при result.status=added сообщи, что товар в корзине, и выдай cart_url из инструмента. При любом ином статусе не утверждай, что корзина изменена. Это прототипная корзина, не корзина сайта ekt.kz; не называй её корзиной ekt.kz. Не оформляй заказ и не запрашивай платёжные данные.",
           "maxIterations": 8
         }
       }
@@ -189,6 +189,54 @@
           "name": "Postgres account"
         }
       }
+    },
+    {
+      "id": "401470fc-03d0-4ec0-acd8-bb41442f3d26",
+      "name": "prepare_cart_intent",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        992,
+        336
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT prepare_cart_intent($1, $2, $3::integer, $4) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId, $fromAI('sku', 'Exact product SKU/article', 'string'), $fromAI('quantity', 'Positive integer quantity', 'number'), $execution.id].join(',') }}"
+        },
+        "toolDescription": "Use when customer asks to add a specific SKU and quantity. Only prepares an item, does not change the cart. Repeat SKU and quantity and ask for a separate explicit yes."
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "c251f6e3-c4f9-4eef-af39-b1339eeff21e",
+      "name": "confirm_add_to_cart",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        336
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT confirm_add_to_cart($1, $2::boolean, $3, $4) AS result",
+        "options": {
+          "queryReplacement": "={{ [$('Chat Trigger').first().json.sessionId, /^(?:да(?:[,!\\s]*(?:добавь|добавляй|добавить|в корзину))?|иә(?:[,!\\s]*(?:қос|себетке қос))?)$/iu.test(String($('Chat Trigger').first().json.chatInput || '').trim()), $execution.id, 'https://marindsain8n.ru/webhook/ekt-cart'].join(',') }}"
+        },
+        "toolDescription": "Use only after prepare_cart_intent returned awaiting_confirmation in a previous message and current customer message explicitly confirms. SQL independently checks raw-message consent, pending item, expiry, separate execution and stock. Never claim success unless status is added."
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
     }
   ],
   "connections": {
@@ -268,17 +316,41 @@
           }
         ]
       ]
+    },
+    "prepare_cart_intent": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "confirm_add_to_cart": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "binaryMode": "separate"
   },
-  "versionId": "311238d9-4e1e-4aef-9aa1-e08a2b65f5ba",
+  "versionId": "55cf1879-f352-4d4d-a47d-5b5adc16efcf",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"
   },
   "pinData": {}
 }
+

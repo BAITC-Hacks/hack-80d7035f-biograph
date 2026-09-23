@@ -1,0 +1,61 @@
+{
+  "name": "ekt_cart_schema",
+  "nodes": [
+    {
+      "id": "a2b1365e-e254-47e2-8d88-28a506dce953",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a5eb51ac-dba6-4a4c-baa4-c5e68232e14a",
+      "name": "Install cart schema",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Prototype cart for the hosted n8n chat. This is not the ekt.kz website cart.\n-- Run after db/init.sql. Safe to run repeatedly.\n\nCREATE TABLE IF NOT EXISTS cart_sessions (\n  session_id TEXT PRIMARY KEY,\n  token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS cart_pending (\n  session_id TEXT PRIMARY KEY REFERENCES cart_sessions(session_id) ON DELETE CASCADE,\n  sku TEXT NOT NULL REFERENCES products(sku),\n  quantity INTEGER NOT NULL CHECK (quantity > 0),\n  prepared_execution TEXT NOT NULL,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\n\nCREATE TABLE IF NOT EXISTS cart_items (\n  session_id TEXT NOT NULL REFERENCES cart_sessions(session_id) ON DELETE CASCADE,\n  sku TEXT NOT NULL REFERENCES products(sku),\n  quantity INTEGER NOT NULL CHECK (quantity > 0),\n  added_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  PRIMARY KEY (session_id, sku)\n);\n\nCREATE OR REPLACE FUNCTION prepare_cart_intent(\n  p_session TEXT, p_sku TEXT, p_quantity INTEGER, p_execution TEXT\n) RETURNS JSONB LANGUAGE plpgsql AS $$\nDECLARE\n  product_record products%ROWTYPE;\n  in_cart INTEGER;\nBEGIN\n  IF nullif(trim(p_session), '') IS NULL OR nullif(trim(p_execution), '') IS NULL\n     OR p_quantity IS NULL OR p_quantity < 1 OR p_quantity > 100 THEN\n    RETURN jsonb_build_object('status', 'invalid_request');\n  END IF;\n\n  SELECT * INTO product_record FROM products WHERE sku = p_sku;\n  IF NOT FOUND THEN\n    RETURN jsonb_build_object('status', 'unknown_product');\n  END IF;\n  SELECT coalesce(quantity, 0) INTO in_cart\n    FROM cart_items WHERE session_id = p_session AND sku = p_sku;\n  in_cart := coalesce(in_cart, 0);\n  IF product_record.stock_total < in_cart + p_quantity THEN\n    RETURN jsonb_build_object('status', 'insufficient_stock', 'available',\n      greatest(product_record.stock_total - in_cart, 0));\n  END IF;\n\n  INSERT INTO cart_sessions (session_id) VALUES (p_session)\n    ON CONFLICT (session_id) DO NOTHING;\n  INSERT INTO cart_pending (session_id, sku, quantity, prepared_execution, created_at)\n    VALUES (p_session, p_sku, p_quantity, p_execution, now())\n    ON CONFLICT (session_id) DO UPDATE SET sku = excluded.sku,\n      quantity = excluded.quantity, prepared_execution = excluded.prepared_execution,\n      created_at = now();\n\n  RETURN jsonb_build_object('status', 'awaiting_confirmation', 'sku', p_sku,\n    'name', product_record.name, 'quantity', p_quantity,\n    'unit_price', product_record.price, 'currency', product_record.currency,\n    'stock_total', product_record.stock_total);\nEND;\n$$;\n\nDROP FUNCTION IF EXISTS confirm_add_to_cart(TEXT, BOOLEAN, TEXT);\n\nCREATE OR REPLACE FUNCTION confirm_add_to_cart(\n  p_session TEXT, p_explicit_yes BOOLEAN, p_execution TEXT, p_cart_base_url TEXT\n) RETURNS JSONB LANGUAGE plpgsql AS $$\nDECLARE\n  pending_record cart_pending%ROWTYPE;\n  product_record products%ROWTYPE;\n  session_token UUID;\n  in_cart INTEGER;\nBEGIN\n  -- The boolean is computed from the current raw Chat Trigger message, never by the AI.\n  IF p_explicit_yes IS DISTINCT FROM true THEN\n    RETURN jsonb_build_object('status', 'confirmation_required');\n  END IF;\n  IF nullif(trim(p_session), '') IS NULL OR nullif(trim(p_execution), '') IS NULL\n     OR nullif(trim(p_cart_base_url), '') IS NULL THEN\n    RETURN jsonb_build_object('status', 'invalid_request');\n  END IF;\n\n  SELECT token INTO session_token FROM cart_sessions\n    WHERE session_id = p_session FOR UPDATE;\n  IF NOT FOUND THEN\n    RETURN jsonb_build_object('status', 'no_pending_item');\n  END IF;\n  SELECT * INTO pending_record FROM cart_pending\n    WHERE session_id = p_session FOR UPDATE;\n  IF NOT FOUND THEN\n    RETURN jsonb_build_object('status', 'no_pending_item');\n  END IF;\n  IF pending_record.created_at < now() - interval '15 minutes' THEN\n    DELETE FROM cart_pending WHERE session_id = p_session;\n    RETURN jsonb_build_object('status', 'confirmation_expired');\n  END IF;\n  IF pending_record.prepared_execution = p_execution THEN\n    RETURN jsonb_build_object('status', 'separate_confirmation_message_required');\n  END IF;\n\n  SELECT * INTO product_record FROM products\n    WHERE sku = pending_record.sku FOR UPDATE;\n  IF NOT FOUND THEN\n    RETURN jsonb_build_object('status', 'unknown_product');\n  END IF;\n  SELECT coalesce(quantity, 0) INTO in_cart FROM cart_items\n    WHERE session_id = p_session AND sku = pending_record.sku;\n  in_cart := coalesce(in_cart, 0);\n  IF product_record.stock_total < in_cart + pending_record.quantity THEN\n    RETURN jsonb_build_object('status', 'insufficient_stock', 'available',\n      greatest(product_record.stock_total - in_cart, 0));\n  END IF;\n\n  INSERT INTO cart_items (session_id, sku, quantity)\n    VALUES (p_session, pending_record.sku, pending_record.quantity)\n    ON CONFLICT (session_id, sku) DO UPDATE SET\n      quantity = cart_items.quantity + excluded.quantity;\n  DELETE FROM cart_pending WHERE session_id = p_session;\n\n  RETURN jsonb_build_object('status', 'added', 'sku', pending_record.sku,\n    'quantity_added', pending_record.quantity, 'quantity_in_cart',\n    in_cart + pending_record.quantity, 'cart_token', session_token,\n    'cart_url', rtrim(p_cart_base_url, '/') || '?token=' || session_token);\nEND;\n$$;\n\n-- Only the trusted n8n Postgres credential may operate the cart.\nREVOKE ALL ON cart_sessions, cart_pending, cart_items FROM PUBLIC;\nREVOKE ALL ON FUNCTION prepare_cart_intent(TEXT, TEXT, INTEGER, TEXT) FROM PUBLIC;\nREVOKE ALL ON FUNCTION confirm_add_to_cart(TEXT, BOOLEAN, TEXT, TEXT) FROM PUBLIC;\nDO $revoke$\nDECLARE role_name TEXT;\nBEGIN\n  FOR role_name IN SELECT rolname FROM pg_roles\n    WHERE rolname IN ('anon', 'authenticated') LOOP\n    EXECUTE format('REVOKE ALL ON cart_sessions, cart_pending, cart_items FROM %I', role_name);\n    EXECUTE format('REVOKE ALL ON FUNCTION prepare_cart_intent(TEXT, TEXT, INTEGER, TEXT) FROM %I', role_name);\n    EXECUTE format('REVOKE ALL ON FUNCTION confirm_add_to_cart(TEXT, BOOLEAN, TEXT, TEXT) FROM %I', role_name);\n  END LOOP;\nEND;\n$revoke$;\n\r\n"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Install cart schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "e4364a09-acad-472a-9db3-6d4857312d03",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "pinData": {}
+}
+

@@ -1,0 +1,137 @@
+{
+  "name": "ekt_cart_view",
+  "nodes": [
+    {
+      "id": "753db467-95f0-47bc-a785-d5785c75cf26",
+      "name": "Cart page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ekt-cart",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "2a69bf66-119a-41b7-815d-b5a4d964ef03"
+    },
+    {
+      "id": "c32601e7-98bc-44db-a908-1597c593bcee",
+      "name": "Load cart",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (SELECT 1 FROM cart_sessions WHERE token::text = $1) AS valid, COALESCE((SELECT jsonb_agg(jsonb_build_object('sku', ci.sku, 'name', p.name, 'quantity', ci.quantity, 'unit_price', p.price, 'currency', p.currency, 'line_total', ci.quantity * p.price, 'product_url', p.product_url) ORDER BY p.name) FROM cart_sessions s JOIN cart_items ci ON ci.session_id = s.session_id JOIN products p ON p.sku = ci.sku WHERE s.token::text = $1), '[]'::jsonb) AS items",
+        "options": {
+          "queryReplacement": "={{ $('Cart page').first().json.query?.token ?? 'invalid' }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "6469aef1-a8cf-412f-a8dd-8470567afc88",
+      "name": "Render cart page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json; const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[ch])); const items = Array.isArray(data.items) ? data.items : []; const rows = items.map((item) => '<tr><td><a href=\"' + escapeHtml(item.product_url) + '\">' + escapeHtml(item.name) + '</a><small>' + escapeHtml(item.sku) + '</small></td><td>' + escapeHtml(item.quantity) + '</td><td>' + escapeHtml(item.unit_price) + ' ₸</td><td>' + escapeHtml(item.line_total) + ' ₸</td></tr>').join(''); const total = items.reduce((sum, item) => sum + Number(item.line_total || 0), 0); const content = !data.valid ? '<p>Корзина не найдена. Проверьте ссылку.</p>' : items.length === 0 ? '<p>Корзина пока пуста.</p>' : '<table><thead><tr><th>Товар</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>' + rows + '</tbody></table><p class=\"total\">Итого: ' + escapeHtml(total) + ' ₸</p>'; const html = '<!doctype html><html lang=\"ru\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Прототипная корзина</title><style>body{font:16px system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 16px;color:#17212b}h1{font-size:28px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd}small{display:block;color:#666}.total{font-size:20px;font-weight:700;text-align:right}.notice{background:#fff4d8;padding:12px;border-radius:8px}a{color:#075cbe}</style><h1>Корзина</h1><p class=\"notice\">Это прототипная корзина ассистента, не корзина сайта ekt.kz. Оформление заказа здесь недоступно.</p>' + content + '</html>'; return [{json:{html}}];"
+      }
+    },
+    {
+      "id": "6c83794c-57ec-4ce6-9ad6-91cbcd00a646",
+      "name": "Send cart page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cart page": {
+      "main": [
+        [
+          {
+            "node": "Load cart",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load cart": {
+      "main": [
+        [
+          {
+            "node": "Render cart page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render cart page": {
+      "main": [
+        [
+          {
+            "node": "Send cart page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "620a50ed-1aee-42ca-a189-81cac8021320",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "pinData": {}
+}
+

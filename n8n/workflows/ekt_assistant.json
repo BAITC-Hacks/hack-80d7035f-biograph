@@ -152,7 +152,7 @@
       "parameters": {
         "resource": "database",
         "operation": "executeQuery",
-        "query": "SELECT\n  p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url,\n  CONCAT(\n    'Та же категория; номинальный ток: ', COALESCE(p.attributes ->> 'Номинальный ток', 'не указан'),\n    ' (у исходного: ', COALESCE(src.attributes ->> 'Номинальный ток', 'не указан'), '); ',\n    CASE\n      WHEN p.price = src.price THEN 'цена совпадает'\n      WHEN p.price > src.price THEN 'дороже на ' || (p.price - src.price)::text || ' KZT'\n      ELSE 'дешевле на ' || (src.price - p.price)::text || ' KZT'\n    END\n  ) AS reason\nFROM products p\nJOIN products src ON src.id::text = $1\nWHERE p.category = src.category\n  AND p.stock_total > 0\n  AND p.id <> src.id\nORDER BY p.embedding <=> src.embedding\nLIMIT 5",
+        "query": "SELECT\n  p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url,\n  src.name AS source_name, src.price AS source_price, src.attributes AS source_attributes,\n  CONCAT(\n    'Та же категория; сходство названий ', ROUND(similarity(p.name, src.name) * 100), '%; ',\n    CASE\n      WHEN p.price = src.price THEN 'цена совпадает'\n      WHEN p.price > src.price THEN 'дороже на ' || (p.price - src.price)::text || ' KZT'\n      ELSE 'дешевле на ' || (src.price - p.price)::text || ' KZT'\n    END,\n    '; сравните технические характеристики с исходным товаром'\n  ) AS reason\nFROM products p\nJOIN products src ON src.id::text = $1\nWHERE p.category = src.category\n  AND p.stock_total > 0\n  AND p.id <> src.id\nORDER BY CASE\n  WHEN p.embedding IS NOT NULL AND src.embedding IS NOT NULL\n    AND vector_dims(p.embedding) = vector_dims(src.embedding)\n    THEN p.embedding <=> src.embedding\n  ELSE 1 - similarity(p.name, src.name)\nEND\nLIMIT 5",
         "toolDescription": "Use after get_product shows stock_total is zero, or when the customer explicitly asks for an analog. Returns in-stock products in the same category with a reason.",
         "options": {
           "queryReplacement": "={{ $fromAI('id', 'Product id', 'string') }}"
@@ -275,7 +275,7 @@
     "executionOrder": "v1",
     "availableInMCP": true
   },
-  "versionId": "ef55c6ef-dd66-49bf-b9e1-f61367e16410",
+  "versionId": "311238d9-4e1e-4aef-9aa1-e08a2b65f5ba",
   "meta": {
     "aiBuilderAssisted": true,
     "builderVariant": "mcp"

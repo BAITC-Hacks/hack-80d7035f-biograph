@@ -1,0 +1,148 @@
+{
+  "name": "ekt_catalog_view",
+  "id": "Jpag1MOZDO7q8xbP",
+  "active": true,
+  "nodes": [
+    {
+      "id": "775838c9-f4ce-47a9-817b-8d865ce6f730",
+      "name": "Catalog GET",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ekt-catalog",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "webhookId": "e92895fd-c07b-43fd-b5ca-78cf38636f01"
+    },
+    {
+      "id": "40cbd0ad-66e1-49f6-8ed2-ee6d3e1664ab",
+      "name": "Read public catalogue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH real_products AS (\n SELECT p.sku,p.name,p.price,p.currency,p.stock_total,p.product_url,p.updated_at,\n CASE\n WHEN coalesce(p.attributes->>'KATEGORIYA','') ILIKE '%короб%' OR p.name ILIKE '%короб%' THEN 'Монтажные и распределительные коробки'\n WHEN p.name ILIKE '%диф.%' OR p.name ILIKE '%дифференц%' THEN 'Дифференциальные автоматы'\n WHEN p.category ILIKE '%silovye_avtomaticheskie%' OR p.name ILIKE '%автоматическ%' THEN 'Силовые автоматические выключатели'\n WHEN p.name ILIKE '%реле%' THEN 'Реле контроля'\n WHEN p.category ILIKE '%svetil%' OR p.name ILIKE '%LED%' THEN 'Светильники'\n ELSE coalesce(nullif(p.attributes->>'KATEGORIYA',''),p.category)\n END AS category_name,CASE WHEN p.sku NOT LIKE 'TEST-%' AND p.attributes->>'image_url' ~ '^https://ekt[.]kz/upload/[^[:space:]]+$' THEN p.attributes->>'image_url' ELSE NULL END AS image_url\n FROM products p WHERE p.sku NOT LIKE 'TEST-%' AND p.attributes ? 'source_id'\n), categories AS (\n SELECT category_name,count(*)::int AS product_count,count(*) FILTER(WHERE stock_total>0)::int AS in_stock_count\n FROM real_products GROUP BY category_name\n)\nSELECT jsonb_build_object(\n 'scope','Imported PDF sample only, not the entire ekt.kz catalogue',\n 'total_products',(SELECT count(*)::int FROM real_products),\n 'in_stock_products',(SELECT count(*)::int FROM real_products WHERE stock_total>0),\n 'products_with_photo',(SELECT count(*)::int FROM real_products WHERE image_url IS NOT NULL),\n 'updated_at',(SELECT max(updated_at) FROM real_products),\n 'categories',coalesce((SELECT jsonb_agg(to_jsonb(c) ORDER BY product_count DESC) FROM categories c),'[]'::jsonb),\n 'products',coalesce((SELECT jsonb_agg(to_jsonb(p) ORDER BY (stock_total>0) DESC,category_name,sku) FROM real_products p),'[]'::jsonb)\n) AS result",
+        "options": {
+          "connectionTimeout": 10
+        }
+      },
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "postgres": {
+          "id": "5w8BOoSHZHAigXqZ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "19d86014-856a-4af4-b7e0-18a541e32e47",
+      "name": "Catalogue JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.result }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "public, max-age=30"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              }
+            ]
+          },
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "ee50a608-7911-40f7-aaf4-9cbde2b546bd",
+      "name": "Catalogue unavailable",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\":\"catalog_unavailable\",\"message\":\"Не удалось загрузить каталог. Попробуйте ещё раз.\"}",
+        "options": {
+          "responseCode": 503,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Catalog GET": {
+      "main": [
+        [
+          {
+            "node": "Read public catalogue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read public catalogue": {
+      "main": [
+        [
+          {
+            "node": "Catalogue JSON",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Catalogue unavailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "5cf757b3-cc76-4077-bf11-51bf146ea9c4"
+}

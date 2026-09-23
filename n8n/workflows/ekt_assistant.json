@@ -1,0 +1,279 @@
+{
+  "name": "ekt_assistant",
+  "nodes": [
+    {
+      "id": "01ff8fb3-7ad5-46fd-bf20-462c00d1ccfd",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        112
+      ],
+      "parameters": {
+        "public": true,
+        "mode": "hostedChat",
+        "authentication": "none",
+        "options": {
+          "responseMode": "streaming",
+          "loadPreviousSession": "notSupported",
+          "inputPlaceholder": "Спросите о товаре, наличии или доставке",
+          "title": "Консультант ekt.kz",
+          "subtitle": "Помогу с товаром, наличием, аналогами и условиями покупки"
+        }
+      },
+      "webhookId": "c2829b2f-91dc-4808-9af4-c027923c0d44"
+    },
+    {
+      "id": "3f9c65a2-742f-4e9e-ba79-adab1dcd8836",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        480,
+        112
+      ],
+      "parameters": {
+        "promptType": "auto",
+        "options": {
+          "systemMessage": "Ты — консультант интернет-магазина ekt.kz. Цена и наличие — только из подключённых инструментов, никогда не выдумывай. Если остаток товара равен нулю, сам вызови find_analogs и объясни, почему предложенные аналоги похожи и чем отличаются. Отвечай на языке клиента (русский или казахский), кратко и списком. Для поиска используй только инструменты search_products, get_product, find_analogs и purchase_terms. Не меняй корзину и не оформляй заказ.",
+          "maxIterations": 8
+        }
+      }
+    },
+    {
+      "id": "901b7651-d6e9-47c3-9901-69070bf4249a",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        224,
+        336
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "responsesApiEnabled": true,
+        "options": {
+          "temperature": 0.2,
+          "maxRetries": 2
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "a3caa973-37f8-44fd-80ac-42416c830c80",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.4,
+      "position": [
+        352,
+        336
+      ],
+      "parameters": {
+        "sessionIdType": "fromInput",
+        "tableName": "n8n_chat_histories",
+        "contextWindowLength": 10
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "492b9395-7921-411d-8906-4abe3ac06f5a",
+      "name": "search_products",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        336
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT id, sku, name, category, price, stock_total, attributes, certificate_url, product_url FROM products WHERE name ILIKE '%' || $1 || '%' OR sku ILIKE '%' || $1 || '%' ORDER BY id LIMIT 5",
+        "toolDescription": "Search products by name or article/SKU; call when the customer asks to find or compare products. Returns up to 5 catalog matches.",
+        "options": {
+          "queryReplacement": "={{ $fromAI('query', 'Поисковая фраза или артикул', 'string') }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "5d3c8d03-96c1-49de-b215-ff91421be8ed",
+      "name": "get_product",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        608,
+        336
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT id, sku, name, category, price, stock_total, stock_by_warehouse, attributes, certificate_url, product_url FROM products WHERE id::text = $1 OR sku = $1 LIMIT 1",
+        "toolDescription": "Get one product by numeric id or article/SKU. Returns price, stock by warehouse, characteristics, certificate and ekt.kz card URL.",
+        "options": {
+          "queryReplacement": "={{ $fromAI('id_or_article', 'Product id or article/SKU', 'string') }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "5c5f8b8d-5c94-4909-baa5-da8a0bdab9bf",
+      "name": "find_analogs",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        736,
+        336
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT p.id, p.sku, p.name, p.category, p.price, p.stock_total, p.attributes, p.product_url, 'same category; nearest embedding; in stock' AS reason FROM products p WHERE p.category = (SELECT category FROM products WHERE id::text = $1 LIMIT 1) AND p.stock_total > 0 AND p.id::text <> $1 ORDER BY p.embedding <=> (SELECT embedding FROM products WHERE id::text = $1 LIMIT 1) LIMIT 5",
+        "toolDescription": "Find up to 5 in-stock analogs in the same category, nearest by pgvector embedding. Always return reason explaining similarity and differences.",
+        "options": {
+          "queryReplacement": "={{ $fromAI('id', 'Product id', 'string') }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres"
+        }
+      }
+    },
+    {
+      "id": "0e4953d3-6c46-447d-80b3-2c7a726d7566",
+      "name": "purchase_terms",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        864,
+        336
+      ],
+      "parameters": {
+        "resource": "database",
+        "operation": "executeQuery",
+        "query": "SELECT question, answer FROM terms WHERE question ILIKE '%' || $1 || '%' OR answer ILIKE '%' || $1 || '%' ORDER BY question LIMIT 5",
+        "toolDescription": "Answer questions about payment, delivery and minimum order using only the terms table; never invent conditions.",
+        "options": {
+          "queryReplacement": "={{ $fromAI('question', 'Customer question about purchase terms', 'string') }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "name": "Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_products": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_product": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_analogs": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "purchase_terms": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "cef4c9b2-aaee-4ce8-acdf-70efa83069a3",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "pinData": {}
+}
+
